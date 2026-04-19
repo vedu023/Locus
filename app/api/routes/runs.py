@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_crustdata_client, get_db_session, get_geocoder
 from app.core.auth import UserContext, get_current_user
+from app.core.operations import ACTION_RUN_CREATE, ensure_operation_allowed, record_usage_event
 from app.crustdata.client import CrustdataClient
 from app.db.session import get_session_factory
 from app.geo.geocode import CachedGeocoder
@@ -32,12 +33,26 @@ def create_run(
     geocoder: CachedGeocoder = Depends(get_geocoder),
     session: Session = Depends(get_db_session),
 ) -> CreateRunResponse:
+    ensure_operation_allowed(
+        session=session,
+        current_user=current_user,
+        action=ACTION_RUN_CREATE,
+    )
     run = create_search_run(
         session=session,
         client=client,
         current_user=current_user,
         request=request,
     )
+    record_usage_event(
+        session=session,
+        current_user=current_user,
+        action=ACTION_RUN_CREATE,
+        target_type="search_run",
+        target_id=run.id,
+        details={"lens": request.lens},
+    )
+    session.commit()
     background_tasks.add_task(schedule_run_geocoding, run.id, geocoder)
     return CreateRunResponse.from_search_run(run)
 
