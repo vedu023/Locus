@@ -94,15 +94,23 @@ class CrustdataClient:
 
         self.rate_limiter.acquire()
 
-        response = self.http_client.post(
-            endpoint,
-            headers={
-                "authorization": f"Bearer {self.settings.crustdata_api_key}",
-                "content-type": "application/json",
-                "x-api-version": self.settings.crustdata_api_version,
-            },
-            json=body,
-        )
+        try:
+            response = self.http_client.post(
+                endpoint,
+                headers={
+                    "authorization": f"Bearer {self.settings.crustdata_api_key}",
+                    "content-type": "application/json",
+                    "x-api-version": self.settings.crustdata_api_version,
+                },
+                json=body,
+            )
+        except httpx.HTTPError as exc:
+            raise AppError(
+                code="CRUSTDATA_NETWORK_ERROR",
+                message="Failed to reach Crustdata.",
+                status_code=502,
+                details={"endpoint": endpoint, "provider": "crustdata", "error": str(exc)},
+            ) from exc
 
         try:
             payload = response.json()

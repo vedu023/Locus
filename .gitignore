@@ -12,5 +12,12 @@ wheels/
 # Virtual environments
 .venv
 
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
 # Local planning docs
 Locus-implementation-plan.md

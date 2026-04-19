@@ -84,3 +84,19 @@ def test_crustdata_client_maps_external_errors(monkeypatch):
         )
 
     assert exc_info.value.code == "CRUSTDATA_AUTH_FAILED"
+
+
+def test_crustdata_client_maps_transport_errors(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("network down", request=request)
+
+    client = build_test_client(handler, monkeypatch)
+
+    with pytest.raises(AppError) as exc_info:
+        client.post(
+            endpoint="/company/search/autocomplete",
+            body={"field": "basic_info.name", "query": "acme", "limit": 10},
+            cache_ttl_seconds=60,
+        )
+
+    assert exc_info.value.code == "CRUSTDATA_NETWORK_ERROR"
