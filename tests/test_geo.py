@@ -83,6 +83,11 @@ def test_run_clusters_group_entities_by_location(client, monkeypatch):
             ]
         },
     )
+    monkeypatch.setattr(
+        run_service,
+        "person_search",
+        lambda _client, _request: {"results": []},
+    )
 
     create_response = client.post(
         "/api/runs",
