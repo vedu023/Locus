@@ -47,6 +47,8 @@ class Settings(BaseSettings):
         default="2025-11-01",
         alias="CRUSTDATA_API_VERSION",
     )
+    crustdata_rpm_limit: int = Field(default=12, alias="CRUSTDATA_RPM_LIMIT")
+    crustdata_timeout_seconds: float = Field(default=30.0, alias="CRUSTDATA_TIMEOUT_SECONDS")
 
 
 @lru_cache

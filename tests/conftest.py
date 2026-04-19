@@ -28,6 +28,11 @@ def clear_caches():
 
 
 @pytest.fixture
+def api_app():
+    return app
+
+
+@pytest.fixture
 def client():
     with TestClient(app) as test_client:
         yield test_client
