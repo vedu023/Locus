@@ -54,7 +54,10 @@ class SalesRunInput(BaseModel):
     buyers_per_company: int = Field(default=3, ge=0, le=25)
     buyer_titles: list[str] = Field(default_factory=lambda: list(DEFAULT_BUYER_TITLES))
     buyer_seniorities: list[str] = Field(default_factory=lambda: list(DEFAULT_BUYER_SENIORITIES))
-    buyer_fields: list[str] = Field(default_factory=lambda: list(DEFAULT_BUYER_FIELDS))
+    buyer_fields: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_BUYER_FIELDS),
+        min_length=1,
+    )
     preferred_industries: list[str] = Field(default_factory=list)
     score_weights: SalesScoreWeights = Field(default_factory=SalesScoreWeights)
 

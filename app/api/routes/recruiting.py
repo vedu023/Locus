@@ -50,7 +50,7 @@ class _LocationAccumulator:
 @router.get("/{run_id}/recruiting-summary", response_model=RecruitingRunSummaryResponse)
 def get_recruiting_summary(
     run_id: str,
-    limit: int = Query(default=25, ge=1, le=100),
+    limit: int | None = Query(default=None, ge=1, le=100),
     current_user: UserContext = Depends(get_current_user),
     session: Session = Depends(get_db_session),
 ) -> RecruitingRunSummaryResponse:
@@ -61,6 +61,17 @@ def get_recruiting_summary(
             message="Recruiting summary is only available for recruiting runs.",
             status_code=400,
         )
+
+    effective_limit = limit
+    if effective_limit is None:
+        raw_input = run.input_payload.get("input", {})
+        if not isinstance(raw_input, dict):
+            raw_input = {}
+        raw_default = raw_input.get("top_candidate_limit")
+        if isinstance(raw_default, int) and raw_default > 0:
+            effective_limit = raw_default
+        else:
+            effective_limit = 25
 
     entities = session.scalars(
         select(SearchRunEntity)
@@ -104,7 +115,7 @@ def get_recruiting_summary(
             accumulator.employers.add(employer_key)
 
     candidates: list[RecruitingCandidateSummary] = []
-    for entity in entities[:limit]:
+    for entity in entities[:effective_limit]:
         if entity.person is None:
             continue
         person = entity.person

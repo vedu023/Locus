@@ -216,3 +216,21 @@ def test_sales_summary_rejects_non_sales_runs(client, monkeypatch):
     summary_response = client.get(f"/api/runs/{run_id}/sales-summary")
     assert summary_response.status_code == 400
     assert summary_response.json()["error"]["code"] == "BAD_INPUT"
+
+
+def test_sales_run_rejects_empty_buyer_fields(client):
+    response = client.post(
+        "/api/runs",
+        json={
+            "lens": "sales",
+            "input": {
+                "search": {
+                    "fields": ["basic_info.name", "basic_info.primary_domain"],
+                    "limit": 10,
+                },
+                "buyer_fields": [],
+            },
+        },
+    )
+
+    assert response.status_code == 422

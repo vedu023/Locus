@@ -144,6 +144,7 @@ def test_recruiting_run_builds_filters_and_summary(client, monkeypatch):
                 "target_seniorities": ["vp", "director"],
                 "target_functions": ["engineering"],
                 "target_skills": ["Python"],
+                "top_candidate_limit": 2,
                 "radius": {
                     "latitude": 12.9716,
                     "longitude": 77.5946,
@@ -180,6 +181,7 @@ def test_recruiting_run_builds_filters_and_summary(client, monkeypatch):
     assert summary_payload["summary"]["people_count"] == 3
     assert summary_payload["summary"]["mapped_people_count"] == 3
     assert summary_payload["summary"]["employer_count"] == 2
+    assert len(summary_payload["candidates"]) == 2
     assert summary_payload["candidates"][0]["name"] == "Jane Doe"
     assert (
         summary_payload["candidates"][0]["lens_score"]
@@ -188,6 +190,11 @@ def test_recruiting_run_builds_filters_and_summary(client, monkeypatch):
     assert summary_payload["locations"][0]["raw_label"] == "Bengaluru, Karnataka, India"
     assert summary_payload["locations"][0]["people_count"] == 2
     assert summary_payload["locations"][0]["employer_count"] == 2
+
+    override_response = client.get(f"/api/runs/{run_id}/recruiting-summary?limit=3")
+    assert override_response.status_code == 200
+    override_payload = override_response.json()
+    assert len(override_payload["candidates"]) == 3
 
 
 def test_recruiting_summary_rejects_non_recruiting_runs(client, monkeypatch):
