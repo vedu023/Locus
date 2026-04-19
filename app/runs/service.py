@@ -12,6 +12,11 @@ from app.crustdata.client import CrustdataClient
 from app.crustdata.company import company_search
 from app.crustdata.person import person_search
 from app.db.models import Company, Location, Person, SearchRun, SearchRunEntity, User
+from app.lenses.recruiting import (
+    RecruitingRunInput,
+    build_recruiting_search_request,
+    score_recruiting_person,
+)
 from app.lenses.sales import SalesRunInput, build_sales_buyer_search_request, score_sales_company
 from app.runs.normalization import (
     NormalizedCompany,
@@ -286,6 +291,46 @@ def _run_person_search(
     return entity_models, counts, {"company_search_requests": 0, "person_search_requests": 1}
 
 
+def _run_recruiting_search(
+    *,
+    session: Session,
+    run: SearchRun,
+    client: CrustdataClient,
+    request: CreateRunRequest,
+) -> tuple[list[SearchRunEntity], dict[str, int | str], dict[str, int]]:
+    if not isinstance(request.input, RecruitingRunInput):
+        raise AppError(
+            code="BAD_INPUT",
+            message="Recruiting runs require recruiting-specific input.",
+            status_code=400,
+        )
+
+    search_request = build_recruiting_search_request(request.input)
+    payload = person_search(client, search_request)
+    entities = _build_person_entities(session=session, run=run, payload=payload)
+
+    employers: set[str] = set()
+    entity_models: list[SearchRunEntity] = []
+    for entity, person in entities:
+        score, breakdown = score_recruiting_person(
+            person=person,
+            recruiting_input=request.input,
+            location=person.location,
+        )
+        breakdown["top_candidate_limit"] = request.input.top_candidate_limit
+        entity.lens_score = score
+        entity.score_breakdown = breakdown
+        entity_models.append(entity)
+
+        employer_key = person.current_company_domain or person.current_company_name
+        if employer_key:
+            employers.add(employer_key)
+
+    counts = _calculate_result_counts(entity_type="person", entities=entity_models)
+    counts["employers"] = len(employers)
+    return entity_models, counts, {"company_search_requests": 0, "person_search_requests": 1}
+
+
 def _run_sales_search(
     *,
     session: Session,
@@ -397,6 +442,13 @@ def create_search_run(
             )
         elif request.lens == "investor":
             _entities, result_counts, cost_estimate = _run_company_search(
+                session=session,
+                run=run,
+                client=client,
+                request=request,
+            )
+        elif request.lens == "recruiting":
+            _entities, result_counts, cost_estimate = _run_recruiting_search(
                 session=session,
                 run=run,
                 client=client,
