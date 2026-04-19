@@ -30,6 +30,7 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
+include = ["app/ui/assets/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

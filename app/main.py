@@ -7,11 +7,14 @@ from uuid import uuid4
 import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.errors import AppError, app_error_handler, unhandled_exception_handler
 from app.core.logging import configure_logging
+from app.ui.routes import get_ui_assets_dir
+from app.ui.routes import router as ui_router
 
 logger = logging.getLogger("locus.http")
 
@@ -28,6 +31,8 @@ def create_app() -> FastAPI:
 
     application.add_exception_handler(AppError, app_error_handler)
     application.add_exception_handler(Exception, unhandled_exception_handler)
+    application.mount("/ui", StaticFiles(directory=str(get_ui_assets_dir())), name="ui")
+    application.include_router(ui_router)
     application.include_router(api_router)
 
     @application.middleware("http")
