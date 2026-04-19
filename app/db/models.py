@@ -49,8 +49,12 @@ class Location(TimestampMixin, Base):
     country_code: Mapped[str | None] = mapped_column(String(8), nullable=True)
     latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    point_geojson: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    geocode_status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     geocode_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    geocode_precision: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
     geocode_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    geocode_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     geocoded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
