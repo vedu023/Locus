@@ -1,6 +1,7 @@
 import httpx
 import pytest
 
+from app.core.config import get_settings
 from app.core.errors import AppError
 from app.crustdata.cache import CacheBackend, InMemoryCache
 from app.crustdata.client import CrustdataClient, RateLimiter
@@ -9,6 +10,7 @@ from app.crustdata.client import CrustdataClient, RateLimiter
 def build_test_client(handler, monkeypatch, rpm_limit: int = 12):
     monkeypatch.setenv("CRUSTDATA_API_KEY", "test-key")
     monkeypatch.setenv("CRUSTDATA_RPM_LIMIT", str(rpm_limit))
+    get_settings.cache_clear()
 
     transport = httpx.MockTransport(handler)
     http_client = httpx.Client(base_url="https://api.crustdata.com", transport=transport)

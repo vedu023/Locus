@@ -8,8 +8,10 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
 import pytest
 from fastapi.testclient import TestClient
 
+import app.db.models  # noqa: F401
 from app.core.config import get_settings
 from app.core.redis_client import get_redis_client
+from app.db.base import Base
 from app.db.session import get_engine, get_session_factory
 from app.main import app
 
@@ -25,6 +27,15 @@ def clear_caches():
     get_engine.cache_clear()
     get_session_factory.cache_clear()
     get_redis_client.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def db_schema():
+    engine = get_engine()
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 @pytest.fixture

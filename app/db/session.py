@@ -5,13 +5,19 @@ from typing import Generator
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from app.core.config import get_settings
 
 
 def _engine_kwargs(database_url: str) -> dict[str, object]:
     if database_url.startswith("sqlite"):
-        return {"connect_args": {"check_same_thread": False}}
+        kwargs: dict[str, object] = {
+            "connect_args": {"check_same_thread": False},
+        }
+        if ":memory:" in database_url:
+            kwargs["poolclass"] = StaticPool
+        return kwargs
     return {"pool_pre_ping": True}
 
 
