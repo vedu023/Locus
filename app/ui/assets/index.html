@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Locus Workbench</title>
+    <meta
+      name="description"
+      content="Operator shell for Locus: launch sales, recruiting, and investor runs against the Python backend."
+    />
+    <link rel="icon" type="image/svg+xml" href="/ui/favicon.svg" />
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+    <div class="noise"></div>
+
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Map Workbench</p>
+        <h1>Locus</h1>
+        <p class="tagline">
+          Build the engine first. Scan clusters, inspect entities, and push watchlists from a single operator surface.
+        </p>
+      </div>
+      <div class="masthead-status">
+        <div class="status-chip">
+          <span class="status-label">API</span>
+          <strong id="liveStatus">Checking</strong>
+        </div>
+        <div class="status-chip">
+          <span class="status-label">User</span>
+          <strong id="userBadge">Loading</strong>
+        </div>
+        <div class="status-chip accent">
+          <span class="status-label">Run</span>
+          <strong id="runBadge">Idle</strong>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <section class="panel control-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Mission Control</p>
+            <h2>Lens Builder</h2>
+          </div>
+          <button type="button" class="ghost-button" id="resetFocusButton">Reset focus</button>
+        </div>
+
+        <div class="lens-switch" role="tablist" aria-label="Lens selector">
+          <button type="button" class="lens-pill active" data-lens="sales">Sales</button>
+          <button type="button" class="lens-pill" data-lens="recruiting">Recruiting</button>
+          <button type="button" class="lens-pill" data-lens="investor">Investor</button>
+        </div>
+
+        <form id="runForm" class="stack">
+          <label class="field">
+            <span>Run title</span>
+            <input
+              type="text"
+              name="title"
+              placeholder="West Coast devtools targets"
+              value="Priority motion"
+            />
+          </label>
+
+          <div class="field-grid two">
+            <label class="field">
+              <span>Search limit</span>
+              <input type="number" name="searchLimit" min="1" max="100" value="25" />
+            </label>
+            <label class="field">
+              <span>Entity filter</span>
+              <select id="entityFilter">
+                <option value="all">All entities</option>
+                <option value="company">Companies only</option>
+                <option value="person">People only</option>
+              </select>
+            </label>
+          </div>
+
+          <section class="lens-fields active" data-lens-panel="sales">
+            <div class="field-grid two">
+              <label class="field">
+                <span>Preferred industries</span>
+                <input
+                  type="text"
+                  name="salesPreferredIndustries"
+                  placeholder="Software, AI, Fintech"
+                  value="Software, AI"
+                />
+              </label>
+              <label class="field">
+                <span>Top companies</span>
+                <input type="number" name="salesTopCompanyLimit" min="1" max="25" value="5" />
+              </label>
+            </div>
+
+            <div class="field-grid two">
+              <label class="field">
+                <span>Buyers per company</span>
+                <input type="number" name="salesBuyersPerCompany" min="0" max="25" value="3" />
+              </label>
+              <label class="field">
+                <span>Buyer seniorities</span>
+                <input
+                  type="text"
+                  name="salesBuyerSeniorities"
+                  placeholder="cxo, vp, director"
+                  value="cxo, vp, director"
+                />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Buyer titles</span>
+              <input
+                type="text"
+                name="salesBuyerTitles"
+                placeholder="VP Sales, Head of Sales, Founder"
+                value="VP Sales, Head of Sales, Founder"
+              />
+            </label>
+          </section>
+
+          <section class="lens-fields" data-lens-panel="recruiting" hidden>
+            <div class="field-grid two">
+              <label class="field">
+                <span>Target titles</span>
+                <input
+                  type="text"
+                  name="recruitingTitles"
+                  placeholder="VP Engineering, Staff Engineer"
+                  value="VP Engineering, Staff Engineer"
+                />
+              </label>
+              <label class="field">
+                <span>Top candidates</span>
+                <input type="number" name="recruitingTopLimit" min="1" max="100" value="12" />
+              </label>
+            </div>
+
+            <div class="field-grid two">
+              <label class="field">
+                <span>Target seniorities</span>
+                <input
+                  type="text"
+                  name="recruitingSeniorities"
+                  placeholder="vp, director"
+                  value="vp, director"
+                />
+              </label>
+              <label class="field">
+                <span>Target functions</span>
+                <input
+                  type="text"
+                  name="recruitingFunctions"
+                  placeholder="engineering, product"
+                  value="engineering"
+                />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Target skills</span>
+              <input
+                type="text"
+                name="recruitingSkills"
+                placeholder="Python, distributed systems"
+                value="Python, distributed systems"
+              />
+            </label>
+
+            <div class="field-grid three">
+              <label class="field">
+                <span>Radius latitude</span>
+                <input type="number" step="0.0001" name="recruitingLat" placeholder="12.9716" />
+              </label>
+              <label class="field">
+                <span>Radius longitude</span>
+                <input type="number" step="0.0001" name="recruitingLng" placeholder="77.5946" />
+              </label>
+              <label class="field">
+                <span>Radius km</span>
+                <input type="number" step="1" min="1" max="1000" name="recruitingRadiusKm" placeholder="50" />
+              </label>
+            </div>
+          </section>
+
+          <section class="lens-fields" data-lens-panel="investor" hidden>
+            <div class="field-grid two">
+              <label class="field">
+                <span>Target markets</span>
+                <input
+                  type="text"
+                  name="investorMarkets"
+                  placeholder="AI Infrastructure, Devtools"
+                  value="AI Infrastructure, Developer Tools"
+                />
+              </label>
+              <label class="field">
+                <span>Target categories</span>
+                <input
+                  type="text"
+                  name="investorCategories"
+                  placeholder="Developer Tools"
+                  value="Developer Tools"
+                />
+              </label>
+            </div>
+
+            <div class="field-grid two">
+              <label class="field">
+                <span>Target industries</span>
+                <input
+                  type="text"
+                  name="investorIndustries"
+                  placeholder="Software, Manufacturing"
+                  value="Software"
+                />
+              </label>
+              <label class="field">
+                <span>Top companies</span>
+                <input type="number" name="investorTopCompanyLimit" min="1" max="25" value="5" />
+              </label>
+            </div>
+
+            <div class="field-grid three">
+              <label class="field">
+                <span>Min headcount</span>
+                <input type="number" name="investorMinHeadcount" min="1" placeholder="25" />
+              </label>
+              <label class="field">
+                <span>Max headcount</span>
+                <input type="number" name="investorMaxHeadcount" min="1" placeholder="500" />
+              </label>
+              <label class="field">
+                <span>Founders per company</span>
+                <input type="number" name="investorFoundersPerCompany" min="0" max="25" value="2" />
+              </label>
+            </div>
+
+            <div class="field-grid two">
+              <label class="field">
+                <span>Min hiring growth %</span>
+                <input type="number" step="1" name="investorMinOpeningsGrowth" placeholder="20" />
+              </label>
+              <label class="field">
+                <span>Min follower growth %</span>
+                <input type="number" step="1" name="investorMinFollowerGrowth" placeholder="15" />
+              </label>
+            </div>
+          </section>
+
+          <div class="action-row">
+            <button type="submit" class="primary-button" id="runButton">Launch run</button>
+            <p class="microcopy" id="formHint">
+              Runs execute directly against the live Python APIs. Lens summaries and watchlists hydrate from persisted backend state.
+            </p>
+          </div>
+        </form>
+      </section>
+
+      <section class="stage-column">
+        <section class="panel hero-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Current Run</p>
+              <h2 id="heroTitle">No run selected</h2>
+            </div>
+            <div class="panel-actions">
+              <span class="status-inline" id="runMeta">Waiting for input</span>
+            </div>
+          </div>
+          <div class="stat-grid" id="statGrid"></div>
+          <div class="event-strip" id="eventStrip">
+            <div class="event-message">Launch a lens run to populate the map, summary cards, and watchlists.</div>
+          </div>
+        </section>
+
+        <section class="panel map-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Signal Map</p>
+              <h2>Geo clusters</h2>
+            </div>
+            <div class="panel-actions">
+              <button type="button" class="ghost-button" id="reloadRunButton">Reload run</button>
+            </div>
+          </div>
+          <div class="map-frame">
+            <svg id="mapSvg" viewBox="0 0 980 540" role="img" aria-label="Cluster map"></svg>
+            <div class="map-overlay">
+              <div class="map-legend" id="mapLegend"></div>
+              <div class="cluster-detail" id="clusterDetail">
+                <p class="cluster-placeholder">Map focus appears here when you select a cluster.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel entities-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Run Entities</p>
+              <h2>Map slice</h2>
+            </div>
+            <span class="status-inline" id="entityCountLabel">0 items</span>
+          </div>
+          <div class="entity-list" id="entityList"></div>
+        </section>
+      </section>
+
+      <aside class="intel-column">
+        <section class="panel summary-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Lens Output</p>
+              <h2>Ranked cards</h2>
+            </div>
+          </div>
+          <div class="summary-body" id="summaryBody"></div>
+        </section>
+
+        <section class="panel watchlist-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Watchlists</p>
+              <h2>Tracked entities</h2>
+            </div>
+          </div>
+
+          <form id="watchlistForm" class="stack compact">
+            <label class="field">
+              <span>Name</span>
+              <input type="text" name="watchlistName" placeholder="Priority board" required />
+            </label>
+            <label class="field">
+              <span>Description</span>
+              <input
+                type="text"
+                name="watchlistDescription"
+                placeholder="Targets to refresh after every run"
+              />
+            </label>
+            <button type="submit" class="secondary-button">Create watchlist</button>
+          </form>
+
+          <div class="watchlist-toolbar">
+            <span class="status-inline" id="watchlistBadge">No watchlist selected</span>
+            <button type="button" class="ghost-button" id="refreshWatchlistButton">Refresh selected</button>
+          </div>
+
+          <div class="watchlist-list" id="watchlistList"></div>
+        </section>
+
+        <section class="panel signals-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Signal Timeline</p>
+              <h2>Refresh output</h2>
+            </div>
+          </div>
+          <div class="timeline" id="signalTimeline"></div>
+        </section>
+      </aside>
+    </main>
+
+    <script type="module" src="/ui/app.js"></script>
+  </body>
+</html>
