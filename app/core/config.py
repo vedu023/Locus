@@ -50,6 +50,23 @@ class Settings(BaseSettings):
     crustdata_rpm_limit: int = Field(default=12, alias="CRUSTDATA_RPM_LIMIT")
     crustdata_timeout_seconds: float = Field(default=30.0, alias="CRUSTDATA_TIMEOUT_SECONDS")
 
+    geocoder_provider: Literal["noop", "nominatim"] = Field(
+        default="noop",
+        alias="LOCUS_GEOCODER_PROVIDER",
+    )
+    geocoder_cache_ttl_seconds: int = Field(
+        default=86400,
+        alias="LOCUS_GEOCODER_CACHE_TTL_SECONDS",
+    )
+    geocoder_timeout_seconds: float = Field(
+        default=10.0,
+        alias="LOCUS_GEOCODER_TIMEOUT_SECONDS",
+    )
+    geocoder_user_agent: str = Field(
+        default="Locus/0.1 (dev@locus.local)",
+        alias="LOCUS_GEOCODER_USER_AGENT",
+    )
+
 
 @lru_cache
 def get_settings() -> Settings:
