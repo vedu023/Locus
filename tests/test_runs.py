@@ -30,6 +30,11 @@ def test_create_sales_run_persists_companies_and_locations(client, monkeypatch):
             ]
         },
     )
+    monkeypatch.setattr(
+        run_service,
+        "person_search",
+        lambda _client, _request: {"results": []},
+    )
 
     response = client.post(
         "/api/runs",
@@ -50,6 +55,7 @@ def test_create_sales_run_persists_companies_and_locations(client, monkeypatch):
     assert payload["status"] == "complete"
     assert payload["lens"] == "sales"
     assert payload["result_counts"]["companies"] == 1
+    assert payload["result_counts"]["buyers"] == 0
     assert payload["result_counts"]["locations"] == 1
 
     run_id = payload["run_id"]

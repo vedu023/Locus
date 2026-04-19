@@ -12,6 +12,7 @@ from app.crustdata.client import CrustdataClient
 from app.crustdata.company import company_search
 from app.crustdata.person import person_search
 from app.db.models import Company, Location, Person, SearchRun, SearchRunEntity, User
+from app.lenses.sales import SalesRunInput, build_sales_buyer_search_request, score_sales_company
 from app.runs.normalization import (
     NormalizedCompany,
     NormalizedLocation,
@@ -209,6 +210,170 @@ def _build_run(request: CreateRunRequest, user: User) -> SearchRun:
     )
 
 
+def _build_company_entities(
+    *,
+    session: Session,
+    run: SearchRun,
+    payload: dict,
+) -> list[tuple[SearchRunEntity, Company]]:
+    raw_results = extract_results(payload, "company")
+    entities: list[tuple[SearchRunEntity, Company]] = []
+    for rank, item in enumerate(raw_results, start=1):
+        company = upsert_company(session, normalize_company(item))
+        entity = SearchRunEntity(
+            run_id=run.id,
+            entity_type="company",
+            company_id=company.id,
+            location_id=company.hq_location_id,
+            rank=rank,
+            lens_score=0.0,
+            score_breakdown={},
+        )
+        session.add(entity)
+        entities.append((entity, company))
+    return entities
+
+
+def _build_person_entities(
+    *,
+    session: Session,
+    run: SearchRun,
+    payload: dict,
+) -> list[tuple[SearchRunEntity, Person]]:
+    raw_results = extract_results(payload, "person")
+    entities: list[tuple[SearchRunEntity, Person]] = []
+    for rank, item in enumerate(raw_results, start=1):
+        person = upsert_person(session, normalize_person(item))
+        entity = SearchRunEntity(
+            run_id=run.id,
+            entity_type="person",
+            person_id=person.id,
+            location_id=person.location_id,
+            rank=rank,
+            lens_score=0.0,
+            score_breakdown={},
+        )
+        session.add(entity)
+        entities.append((entity, person))
+    return entities
+
+
+def _run_company_search(
+    *,
+    session: Session,
+    run: SearchRun,
+    client: CrustdataClient,
+    request: CreateRunRequest,
+) -> tuple[list[SearchRunEntity], dict[str, int | str], dict[str, int]]:
+    payload = company_search(client, request.input.search)
+    entities = _build_company_entities(session=session, run=run, payload=payload)
+    entity_models = [entity for entity, _company in entities]
+    counts = _calculate_result_counts(entity_type="company", entities=entity_models)
+    return entity_models, counts, {"company_search_requests": 1, "person_search_requests": 0}
+
+
+def _run_person_search(
+    *,
+    session: Session,
+    run: SearchRun,
+    client: CrustdataClient,
+    request: CreateRunRequest,
+) -> tuple[list[SearchRunEntity], dict[str, int | str], dict[str, int]]:
+    payload = person_search(client, request.input.search)
+    entities = _build_person_entities(session=session, run=run, payload=payload)
+    entity_models = [entity for entity, _person in entities]
+    counts = _calculate_result_counts(entity_type="person", entities=entity_models)
+    return entity_models, counts, {"company_search_requests": 0, "person_search_requests": 1}
+
+
+def _run_sales_search(
+    *,
+    session: Session,
+    run: SearchRun,
+    client: CrustdataClient,
+    request: CreateRunRequest,
+) -> tuple[list[SearchRunEntity], dict[str, int | str], dict[str, int]]:
+    if not isinstance(request.input, SalesRunInput):
+        raise AppError(
+            code="BAD_INPUT",
+            message="Sales runs require sales-specific input.",
+            status_code=400,
+        )
+
+    payload = company_search(client, request.input.search)
+    company_entities = _build_company_entities(session=session, run=run, payload=payload)
+
+    buyer_ids_by_company: dict[str, list[str]] = {}
+    person_search_requests = 0
+    unique_buyer_ids: set[str] = set()
+
+    base_scores: dict[str, tuple[float, dict]] = {}
+    for entity, company in company_entities:
+        score, breakdown = score_sales_company(
+            company=company,
+            sales_input=request.input,
+            buyer_count=0,
+            location=company.hq_location,
+        )
+        base_scores[entity.id] = (score, breakdown)
+
+    top_entities = sorted(
+        company_entities,
+        key=lambda item: (-base_scores[item[0].id][0], item[0].rank or 0),
+    )[: request.input.top_company_limit]
+
+    for entity, company in top_entities:
+        buyer_request = build_sales_buyer_search_request(company=company, sales_input=request.input)
+        if buyer_request is None:
+            buyer_ids_by_company[entity.id] = []
+            continue
+
+        person_search_requests += 1
+        buyer_payload = person_search(client, buyer_request)
+        buyers: list[Person] = []
+        for item in extract_results(buyer_payload, "person"):
+            person = upsert_person(session, normalize_person(item))
+            buyers.append(person)
+
+        deduped_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for buyer in buyers:
+            if buyer.id in seen_ids:
+                continue
+            seen_ids.add(buyer.id)
+            deduped_ids.append(buyer.id)
+            unique_buyer_ids.add(buyer.id)
+        buyer_ids_by_company[entity.id] = deduped_ids
+
+    entity_models: list[SearchRunEntity] = []
+    for entity, company in company_entities:
+        buyer_ids = buyer_ids_by_company.get(entity.id, [])
+        score, breakdown = score_sales_company(
+            company=company,
+            sales_input=request.input,
+            buyer_count=len(buyer_ids),
+            location=company.hq_location,
+        )
+        breakdown["buyer_person_ids"] = buyer_ids
+        breakdown["buyer_count"] = len(buyer_ids)
+        breakdown["enriched_for_buyers"] = entity.id in buyer_ids_by_company
+        entity.lens_score = score
+        entity.score_breakdown = breakdown
+        entity_models.append(entity)
+
+    counts = _calculate_result_counts(entity_type="company", entities=entity_models)
+    counts["buyers"] = len(unique_buyer_ids)
+    counts["buyer_companies"] = sum(1 for buyer_ids in buyer_ids_by_company.values() if buyer_ids)
+    return (
+        entity_models,
+        counts,
+        {
+            "company_search_requests": 1,
+            "person_search_requests": person_search_requests,
+        },
+    )
+
+
 def create_search_run(
     *,
     session: Session,
@@ -223,47 +388,30 @@ def create_search_run(
     run_id = run.id
 
     try:
-        if request.lens in {"sales", "investor"}:
-            payload = company_search(client, request.input.search)
-            raw_results = extract_results(payload, "company")
-            entities = []
-            for rank, item in enumerate(raw_results, start=1):
-                company = upsert_company(session, normalize_company(item))
-                entity = SearchRunEntity(
-                    run_id=run.id,
-                    entity_type="company",
-                    company_id=company.id,
-                    location_id=company.hq_location_id,
-                    rank=rank,
-                    lens_score=0.0,
-                    score_breakdown={},
-                )
-                session.add(entity)
-                entities.append(entity)
-            primary_entity_type = "company"
+        if request.lens == "sales":
+            _entities, result_counts, cost_estimate = _run_sales_search(
+                session=session,
+                run=run,
+                client=client,
+                request=request,
+            )
+        elif request.lens == "investor":
+            _entities, result_counts, cost_estimate = _run_company_search(
+                session=session,
+                run=run,
+                client=client,
+                request=request,
+            )
         else:
-            payload = person_search(client, request.input.search)
-            raw_results = extract_results(payload, "person")
-            entities = []
-            for rank, item in enumerate(raw_results, start=1):
-                person = upsert_person(session, normalize_person(item))
-                entity = SearchRunEntity(
-                    run_id=run.id,
-                    entity_type="person",
-                    person_id=person.id,
-                    location_id=person.location_id,
-                    rank=rank,
-                    lens_score=0.0,
-                    score_breakdown={},
-                )
-                session.add(entity)
-                entities.append(entity)
-            primary_entity_type = "person"
+            _entities, result_counts, cost_estimate = _run_person_search(
+                session=session,
+                run=run,
+                client=client,
+                request=request,
+            )
 
-        run.result_counts = _calculate_result_counts(
-            entity_type=primary_entity_type,
-            entities=entities,
-        )
+        run.result_counts = result_counts
+        run.cost_estimate = cost_estimate
         run.status = "complete"
         run.completed_at = _utcnow()
         session.commit()
