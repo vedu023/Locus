@@ -11,7 +11,14 @@ from app.core.errors import AppError
 from app.crustdata.client import CrustdataClient
 from app.crustdata.company import company_search
 from app.crustdata.person import person_search
-from app.db.models import Company, Location, Person, SearchRun, SearchRunEntity, User
+from app.db.models import Company, Location, Person, SearchRun, SearchRunEntity, Signal, User
+from app.lenses.investor import (
+    InvestorRunInput,
+    build_investor_company_search_request,
+    build_investor_founder_search_request,
+    build_investor_signal_summaries,
+    score_investor_company,
+)
 from app.lenses.recruiting import (
     RecruitingRunInput,
     build_recruiting_search_request,
@@ -263,6 +270,46 @@ def _build_person_entities(
     return entities
 
 
+def _upsert_company_signal(
+    *,
+    session: Session,
+    company: Company,
+    location: Location | None,
+    signal_type: str,
+    title: str,
+    description: str | None,
+    confidence: float,
+    occurred_at: datetime | None,
+    raw: dict,
+) -> Signal:
+    signal = session.scalar(
+        select(Signal).where(
+            Signal.company_id == company.id,
+            Signal.signal_type == signal_type,
+            Signal.source == "crustdata",
+            Signal.title == title,
+        )
+    )
+    if signal is None:
+        signal = Signal(
+            entity_type="company",
+            company_id=company.id,
+            location_id=location.id if location is not None else None,
+            signal_type=signal_type,
+            source="crustdata",
+            title=title,
+        )
+        session.add(signal)
+
+    signal.location_id = location.id if location is not None else None
+    signal.description = description
+    signal.confidence = confidence
+    signal.occurred_at = occurred_at
+    signal.raw = raw
+    session.flush()
+    return signal
+
+
 def _run_company_search(
     *,
     session: Session,
@@ -329,6 +376,119 @@ def _run_recruiting_search(
     counts = _calculate_result_counts(entity_type="person", entities=entity_models)
     counts["employers"] = len(employers)
     return entity_models, counts, {"company_search_requests": 0, "person_search_requests": 1}
+
+
+def _run_investor_search(
+    *,
+    session: Session,
+    run: SearchRun,
+    client: CrustdataClient,
+    request: CreateRunRequest,
+) -> tuple[list[SearchRunEntity], dict[str, int | str], dict[str, int]]:
+    if not isinstance(request.input, InvestorRunInput):
+        raise AppError(
+            code="BAD_INPUT",
+            message="Investor runs require investor-specific input.",
+            status_code=400,
+        )
+
+    search_request = build_investor_company_search_request(request.input)
+    payload = company_search(client, search_request)
+    company_entities = _build_company_entities(session=session, run=run, payload=payload)
+
+    founder_ids_by_company: dict[str | None, list[str]] = {}
+    person_search_requests = 0
+    unique_founder_ids: set[str] = set()
+    signal_count = 0
+
+    base_scores: list[tuple[SearchRunEntity, Company, float, dict]] = []
+    for entity, company in company_entities:
+        score, breakdown = score_investor_company(
+            company=company,
+            investor_input=request.input,
+            founder_count=0,
+            location=company.hq_location,
+        )
+        base_scores.append((entity, company, score, breakdown))
+
+    top_entities = sorted(
+        base_scores,
+        key=lambda item: (-item[2], item[0].rank or 0),
+    )[: request.input.top_company_limit]
+
+    for entity, company, _score, _breakdown in top_entities:
+        founder_request = build_investor_founder_search_request(
+            company=company,
+            investor_input=request.input,
+        )
+        if founder_request is None:
+            founder_ids_by_company[entity.id] = []
+            continue
+
+        person_search_requests += 1
+        founder_payload = person_search(client, founder_request)
+        founders: list[Person] = []
+        for item in extract_results(founder_payload, "person"):
+            founder = upsert_person(session, normalize_person(item))
+            founders.append(founder)
+
+        deduped_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for founder in founders:
+            if founder.id in seen_ids:
+                continue
+            seen_ids.add(founder.id)
+            deduped_ids.append(founder.id)
+            unique_founder_ids.add(founder.id)
+        founder_ids_by_company[entity.id] = deduped_ids
+
+    entity_models: list[SearchRunEntity] = []
+    for entity, company in company_entities:
+        founder_ids = founder_ids_by_company.get(entity.id, [])
+        score, breakdown = score_investor_company(
+            company=company,
+            investor_input=request.input,
+            founder_count=len(founder_ids),
+            location=company.hq_location,
+        )
+        signals = build_investor_signal_summaries(company)
+        for signal in signals:
+            _upsert_company_signal(
+                session=session,
+                company=company,
+                location=company.hq_location,
+                signal_type=signal.signal_type,
+                title=signal.title,
+                description=signal.description,
+                confidence=signal.confidence,
+                occurred_at=signal.occurred_at,
+                raw={"run_id": run.id, **signal.model_dump(mode="json")},
+            )
+
+        breakdown["founder_person_ids"] = founder_ids
+        breakdown["founder_count"] = len(founder_ids)
+        breakdown["enriched_for_founders"] = entity.id in founder_ids_by_company
+        breakdown["top_company_limit"] = request.input.top_company_limit
+        breakdown["signal_types"] = [signal.signal_type for signal in signals]
+        entity.lens_score = score
+        entity.score_breakdown = breakdown
+        entity_models.append(entity)
+        signal_count += len(signals)
+
+    counts = _calculate_result_counts(entity_type="company", entities=entity_models)
+    counts["founders"] = len(unique_founder_ids)
+    counts["founder_companies"] = sum(
+        1 for founder_ids in founder_ids_by_company.values() if founder_ids
+    )
+    counts["signals"] = signal_count
+    return (
+        entity_models,
+        counts,
+        {
+            "company_search_requests": 1,
+            "person_search_requests": person_search_requests,
+        },
+    )
 
 
 def _run_sales_search(
@@ -441,7 +601,7 @@ def create_search_run(
                 request=request,
             )
         elif request.lens == "investor":
-            _entities, result_counts, cost_estimate = _run_company_search(
+            _entities, result_counts, cost_estimate = _run_investor_search(
                 session=session,
                 run=run,
                 client=client,

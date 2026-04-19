@@ -5,14 +5,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, model_validator
 
-from app.crustdata.types import CompanySearchRequest
 from app.db.models import SearchRun
+from app.lenses.investor import InvestorRunInput
 from app.lenses.recruiting import RecruitingRunInput
 from app.lenses.sales import SalesRunInput
-
-
-class InvestorRunInput(BaseModel):
-    search: CompanySearchRequest
 
 
 class CreateRunRequest(BaseModel):
