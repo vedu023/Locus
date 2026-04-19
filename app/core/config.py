@@ -37,6 +37,19 @@ class Settings(BaseSettings):
     auth_mode: Literal["dev", "disabled"] = Field(default="dev", alias="LOCUS_AUTH_MODE")
     dev_user_id: str = Field(default="dev-user", alias="LOCUS_DEV_USER_ID")
     dev_user_email: str = Field(default="dev@locus.local", alias="LOCUS_DEV_USER_EMAIL")
+    admin_user_ids: str = Field(default="", alias="LOCUS_ADMIN_USER_IDS")
+    admin_user_emails: str = Field(default="", alias="LOCUS_ADMIN_USER_EMAILS")
+
+    global_kill_switch: bool = Field(default=False, alias="LOCUS_GLOBAL_KILL_SWITCH")
+    daily_run_limit_per_user: int = Field(default=50, alias="LOCUS_DAILY_RUN_LIMIT_PER_USER")
+    daily_enrich_limit_per_user: int = Field(
+        default=100,
+        alias="LOCUS_DAILY_ENRICH_LIMIT_PER_USER",
+    )
+    daily_refresh_limit_per_user: int = Field(
+        default=25,
+        alias="LOCUS_DAILY_REFRESH_LIMIT_PER_USER",
+    )
 
     crustdata_api_key: str | None = Field(default=None, alias="CRUSTDATA_API_KEY")
     crustdata_api_base_url: str = Field(

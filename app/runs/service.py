@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import UserContext
 from app.core.errors import AppError
+from app.core.users import get_or_create_user
 from app.crustdata.client import CrustdataClient
 from app.crustdata.company import company_search
 from app.crustdata.person import person_search
@@ -38,19 +39,6 @@ from app.runs.schemas import CreateRunRequest
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
-
-def get_or_create_user(session: Session, current_user: UserContext) -> User:
-    user = session.scalar(select(User).where(User.auth_provider_id == current_user.user_id))
-    if user is not None:
-        if user.email != current_user.email:
-            user.email = current_user.email
-        return user
-
-    user = User(auth_provider_id=current_user.user_id, email=current_user.email)
-    session.add(user)
-    session.flush()
-    return user
 
 
 def _get_or_create_location(

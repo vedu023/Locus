@@ -242,6 +242,8 @@ class WatchlistItem(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     watchlist: Mapped[Watchlist] = relationship(back_populates="items")
+    company: Mapped[Company | None] = relationship()
+    person: Mapped[Person | None] = relationship()
 
 
 class ApiCache(Base):
@@ -257,6 +259,22 @@ class ApiCache(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_id)
+    auth_provider_id: Mapped[str] = mapped_column(String(255), index=True)
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    target_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    target_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        index=True,
+    )
+
+
 __all__ = [
     "ApiCache",
     "Base",
@@ -266,6 +284,7 @@ __all__ = [
     "SearchRun",
     "SearchRunEntity",
     "Signal",
+    "UsageEvent",
     "User",
     "Watchlist",
     "WatchlistItem",

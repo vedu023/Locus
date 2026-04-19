@@ -14,6 +14,21 @@ class UserContext(BaseModel):
     is_admin: bool = False
 
 
+def _parse_csv(raw: str) -> set[str]:
+    return {value.strip().lower() for value in raw.split(",") if value.strip()}
+
+
+def _parse_bool(raw: str | None) -> bool | None:
+    if raw is None:
+        return None
+    normalized = raw.strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return None
+
+
 def get_current_user(request: Request) -> UserContext:
     settings = get_settings()
 
@@ -35,9 +50,34 @@ def get_current_user(request: Request) -> UserContext:
             status_code=401,
         )
 
+    admin_override = _parse_bool(request.headers.get("X-Dev-User-Is-Admin"))
+    if admin_override is not None:
+        is_admin = admin_override
+    else:
+        admin_user_ids = _parse_csv(settings.admin_user_ids)
+        admin_user_emails = _parse_csv(settings.admin_user_emails)
+        normalized_email = (email or "").strip().lower()
+        is_admin = (
+            user_id == settings.dev_user_id
+            or normalized_email == settings.dev_user_email.strip().lower()
+            or user_id.strip().lower() in admin_user_ids
+            or normalized_email in admin_user_emails
+        )
+
     return UserContext(
         user_id=user_id,
         email=email,
         auth_mode=settings.auth_mode,
-        is_admin=True,
+        is_admin=is_admin,
     )
+
+
+def require_admin(request: Request) -> UserContext:
+    current_user = get_current_user(request)
+    if not current_user.is_admin:
+        raise AppError(
+            code="FORBIDDEN",
+            message="Admin access is required for this endpoint.",
+            status_code=403,
+        )
+    return current_user
